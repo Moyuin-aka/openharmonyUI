@@ -1,352 +1,197 @@
-// 智能家居设备控制面板 - HarmonyOS ArkUI
+// 智能家居设备控制面板 - 严格对齐设计稿
+import { promptAction } from '@kit.ArkUI'
 
+// 设备数据模型
 @Observed
 class DeviceItemData {
-  id: number = 0
-  name: string = ''
-  isOn: boolean = false
-  type: 'light' | 'ac' | 'speaker' | 'curtain' = 'light'
-  value: number = 0
-  room: string = ''
+  id: number
+  name: string
+  icon: string        // rawfile 图标文件名
+  isOnline: boolean
+  isOn: boolean
+  paramLabel: string   // 参数文本，如 "亮度75%"
+  type: 'power' | 'play' // 控制按钮类型
+  room: string
 
-  constructor(id: number, name: string, type: 'light' | 'ac' | 'speaker' | 'curtain',
-    isOn: boolean, value: number, room: string) {
+  constructor(id: number, name: string, icon: string, isOnline: boolean, isOn: boolean,
+    paramLabel: string, type: 'power' | 'play', room: string) {
     this.id = id
     this.name = name
-    this.type = type
+    this.icon = icon
+    this.isOnline = isOnline
     this.isOn = isOn
-    this.value = value
+    this.paramLabel = paramLabel
+    this.type = type
     this.room = room
   }
 }
 
-@Observed
-class SceneModeData {
-  name: string
-  icon: string
-  color: string
-  isActive: boolean
-
-  constructor(name: string, icon: string, color: string, isActive: boolean) {
-    this.name = name
-    this.icon = icon
-    this.color = color
-    this.isActive = isActive
-  }
-}
-
+// ===== 设备卡片组件（独立封装，可复用） =====
 @Component
 struct DeviceCard {
   @ObjectLink device: DeviceItemData
   onToggle: () => void = () => {}
-  onValueChange: (val: number) => void = () => {}
-  @State private scaleVal: number = 1
-
-  getIconText(): string {
-    if (this.device.type === 'light') return '💡'
-    if (this.device.type === 'ac') return '❄️'
-    if (this.device.type === 'speaker') return '🔊'
-    return '🪟'
-  }
-
-  getValueLabel(): string {
-    if (this.device.type === 'light') return `亮度 ${this.device.value}%`
-    if (this.device.type === 'ac') return `${this.device.value}°C`
-    if (this.device.type === 'speaker') return `音量 ${this.device.value}%`
-    return `开合 ${this.device.value}%`
-  }
-
-  getAccentColor(): string {
-    if (!this.device.isOn) return '#9E9E9E'
-    if (this.device.type === 'light') return '#FFB300'
-    if (this.device.type === 'ac') return '#29B6F6'
-    if (this.device.type === 'speaker') return '#66BB6A'
-    return '#AB47BC'
-  }
 
   build() {
-    Column() {
-      // 顶部：图标 + 开关
-      Row() {
-        Stack() {
-          Circle()
-            .width(48)
-            .height(48)
-            .fill(this.device.isOn ? this.getAccentColor() : '#E0E0E0')
-            .opacity(this.device.isOn ? 0.2 : 0.5)
-          Text(this.getIconText())
-            .fontSize(24)
+    Row() {
+      // 左侧：设备图标
+      Image($rawfile(this.device.icon))
+        .width(60)
+        .height(60)
+        .objectFit(ImageFit.Contain)
+        .margin({ right: 12 })
+
+      // 中间：名称 + 参数
+      Column() {
+        // 第一行：设备名称 + 在线状态
+        Row() {
+          Text(this.device.name)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1A1A1A')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+
+          // 在线状态
+          Row() {
+            Image($rawfile(this.device.isOnline ? 'dot_online.png' : 'dot_offline.png'))
+              .width(8)
+              .height(8)
+              .margin({ right: 4 })
+            Text(this.device.isOnline ? '在线' : '离线')
+              .fontSize(12)
+              .fontColor(this.device.isOnline ? '#4CAF50' : '#9E9E9E')
+          }
         }
-        .width(48)
-        .height(48)
+        .width('100%')
 
-        Blank()
-
-        Toggle({ type: ToggleType.Switch, isOn: this.device.isOn })
-          .selectedColor(this.getAccentColor())
-          .onChange((isOn: boolean) => {
-            this.onToggle()
-          })
-          .width(48)
-          .height(26)
-      }
-      .width('100%')
-
-      // 设备名称
-      Text(this.device.name)
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.device.isOn ? '#212121' : '#9E9E9E')
-        .margin({ top: 12 })
-        .alignSelf(ItemAlign.Start)
-
-      // 房间
-      Text(this.device.room)
-        .fontSize(12)
-        .fontColor('#BDBDBD')
-        .margin({ top: 2 })
-        .alignSelf(ItemAlign.Start)
-
-      Blank()
-
-      // 数值 + 滑动条（仅开启时显示）
-      if (this.device.isOn) {
-        Text(this.getValueLabel())
+        // 参数文本
+        Text(this.device.paramLabel)
           .fontSize(13)
-          .fontColor(this.getAccentColor())
-          .fontWeight(FontWeight.Medium)
-          .margin({ bottom: 8 })
-          .alignSelf(ItemAlign.Start)
-
-        Slider({
-          value: this.device.value,
-          min: this.device.type === 'ac' ? 16 : 0,
-          max: this.device.type === 'ac' ? 30 : 100,
-          style: SliderStyle.InSet
-        })
-          .blockColor(this.getAccentColor())
-          .trackColor('#E0E0E0')
-          .selectedColor(this.getAccentColor())
-          .onChange((value: number) => {
-            this.onValueChange(value)
-          })
-          .width('100%')
+          .fontColor('#999999')
+          .margin({ top: 8 })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
+      .layoutWeight(1)
+
+      // 右侧：控制按钮
+      Image($rawfile(this.getButtonIcon()))
+        .width(40)
+        .height(40)
+        .objectFit(ImageFit.Contain)
+        .margin({ left: 12 })
+        .opacity(this.device.isOnline ? 1.0 : 0.4)
+        .enabled(this.device.isOnline)
+        .onClick(() => {
+          if (this.device.isOnline) {
+            this.onToggle()
+          }
+        })
     }
     .width('100%')
-    .height(this.device.isOn ? 200 : 140)
-    .padding(16)
-    .backgroundColor(this.device.isOn ? '#FFFFFF' : '#F5F5F5')
+    .padding({ left: 16, right: 16, top: 20, bottom: 20 })
     .borderRadius(20)
+    .backdropBlur(60)
+    .backgroundColor('#B3FFFFFF')  // 半透明白色毛玻璃效果
     .shadow({
-      radius: this.device.isOn ? 12 : 4,
-      color: this.device.isOn ? this.getAccentColor() + '30' : '#00000010',
+      radius: 16,
+      color: '#1A000000',
       offsetX: 0,
-      offsetY: this.device.isOn ? 4 : 2
+      offsetY: 4
     })
-    .scale({ x: this.scaleVal, y: this.scaleVal })
-    .animation({ duration: 250, curve: Curve.EaseInOut })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.scaleVal = 0.95
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.scaleVal = 1
-      }
-    })
+  }
+
+  getButtonIcon(): string {
+    if (!this.device.isOnline) {
+      return this.device.type === 'play' ? 'btn_power_off.png' : 'btn_power_off.png'
+    }
+    if (this.device.type === 'play') {
+      return this.device.isOn ? 'btn_pause.png' : 'btn_play.png'
+    }
+    return this.device.isOn ? 'btn_power_on.png' : 'btn_power_off.png'
   }
 }
 
+// ===== 主页面 =====
 @Entry
 @Component
 struct Index {
   @State devices: DeviceItemData[] = [
-    new DeviceItemData(1, '客厅主灯', 'light', true, 75, '客厅'),
-    new DeviceItemData(2, '空调', 'ac', true, 24, '卧室'),
-    new DeviceItemData(3, '智能音箱', 'speaker', false, 50, '书房'),
-    new DeviceItemData(4, '窗帘', 'curtain', false, 0, '客厅'),
-    new DeviceItemData(5, '床头灯', 'light', true, 40, '卧室'),
-    new DeviceItemData(6, '新风系统', 'ac', false, 22, '全屋'),
+    new DeviceItemData(1, '客厅主灯', 'icon_light.png', true, true, '亮度75%', 'power', '客厅'),
+    new DeviceItemData(2, '卧室空调', 'icon_ac_unit.png', true, true, '温度26°C  制冷', 'power', '卧室'),
+    new DeviceItemData(3, '客厅窗帘', 'icon_curtain.png', true, false, '位置50%', 'power', '客厅'),
+    new DeviceItemData(4, '扫地机器人', 'icon_robot.png', true, true, '电量80%  清洁中', 'play', '全屋'),
   ]
 
-  @State scenes: SceneModeData[] = [
-    new SceneModeData('回家模式', '🏠', '#FF7043', true),
-    new SceneModeData('睡眠模式', '🌙', '#5C6BC0', false),
-    new SceneModeData('影院模式', '🎬', '#AB47BC', false),
-    new SceneModeData('离家模式', '👋', '#78909C', false),
-  ]
-
-  @State greeting: string = ''
-
-  aboutToAppear() {
-    const hour = new Date().getHours()
-    if (hour < 6) this.greeting = '夜深了'
-    else if (hour < 12) this.greeting = '早上好'
-    else if (hour < 18) this.greeting = '下午好'
-    else this.greeting = '晚上好'
-  }
-
-  getOnlineCount(): number {
-    return this.devices.filter(d => d.isOn).length
-  }
-
-  getDeviceRows(): DeviceItemData[][] {
-    let rows: DeviceItemData[][] = []
-    for (let i = 0; i < this.devices.length; i += 2) {
-      if (i + 1 < this.devices.length) {
-        rows.push([this.devices[i], this.devices[i + 1]])
-      } else {
-        rows.push([this.devices[i]])
-      }
-    }
-    return rows
-  }
-
-  applyScene(scene: SceneModeData, index: number) {
-    this.scenes.forEach((s, i) => {
-      s.isActive = (i === index)
-    })
-    if (scene.name === '睡眠模式') {
-      this.devices.forEach(d => {
-        if (d.type === 'light') d.isOn = false
-        if (d.name === '床头灯') { d.isOn = true; d.value = 10 }
-        if (d.type === 'ac') { d.isOn = true; d.value = 22 }
-      })
-    } else if (scene.name === '回家模式') {
-      this.devices.forEach(d => {
-        if (d.name === '客厅主灯') { d.isOn = true; d.value = 75 }
-        if (d.type === 'ac') d.isOn = true
-      })
-    } else if (scene.name === '影院模式') {
-      this.devices.forEach(d => {
-        if (d.type === 'light') { d.isOn = true; d.value = 15 }
-        if (d.name === '窗帘') { d.isOn = true; d.value = 100 }
-        if (d.name === '智能音箱') { d.isOn = true; d.value = 70 }
-      })
-    } else if (scene.name === '离家模式') {
-      this.devices.forEach(d => { d.isOn = false })
-    }
-  }
+  @State isRefreshing: boolean = false
 
   build() {
-    Column() {
-      // ===== 顶部问候 =====
-      Row() {
-        Column() {
-          Text(this.greeting)
-            .fontSize(28)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#212121')
-          Text(`${this.getOnlineCount()} 个设备运行中`)
-            .fontSize(14)
-            .fontColor('#9E9E9E')
-            .margin({ top: 4 })
-        }
-        .alignItems(HorizontalAlign.Start)
+    Stack() {
+      // 背景图
+      Image($rawfile('bg.png'))
+        .width('100%')
+        .height('100%')
+        .objectFit(ImageFit.Cover)
 
-        Blank()
+      // 内容层
+      Column() {
+        // 标题
+        Text('我的智能设备')
+          .fontSize(24)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1A1A1A')
+          .width('100%')
+          .padding({ left: 20, top: 12, bottom: 16 })
 
-        // 环境信息胶囊
-        Row() {
-          Text('🌡 26°C')
-            .fontSize(13)
-            .fontColor('#616161')
-          Divider()
-            .vertical(true)
-            .height(14)
-            .margin({ left: 8, right: 8 })
-            .color('#E0E0E0')
-          Text('💧 65%')
-            .fontSize(13)
-            .fontColor('#616161')
-        }
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .backgroundColor('#F5F5F5')
-        .borderRadius(20)
-      }
-      .width('100%')
-      .padding({ left: 20, right: 20, top: 12 })
-
-      // ===== 场景模式 =====
-      Text('场景模式')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#212121')
-        .margin({ top: 24, bottom: 12 })
-        .padding({ left: 20 })
-        .alignSelf(ItemAlign.Start)
-
-      Scroll() {
-        Row({ space: 12 }) {
-          ForEach(this.scenes, (scene: SceneModeData, index: number) => {
-            Column() {
-              Text(scene.icon)
-                .fontSize(28)
-              Text(scene.name)
-                .fontSize(12)
-                .fontColor(scene.isActive ? '#FFFFFF' : '#616161')
-                .margin({ top: 6 })
-            }
-            .width(80)
-            .height(80)
-            .justifyContent(FlexAlign.Center)
-            .backgroundColor(scene.isActive ? scene.color : '#F5F5F5')
-            .borderRadius(16)
-            .shadow({
-              radius: scene.isActive ? 8 : 0,
-              color: scene.isActive ? scene.color + '40' : '#00000000',
-              offsetX: 0,
-              offsetY: scene.isActive ? 3 : 0
-            })
-            .animation({ duration: 300, curve: Curve.EaseInOut })
-            .onClick(() => {
-              this.applyScene(scene, index)
-            })
-          })
-        }
-        .padding({ left: 20, right: 20 })
-      }
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-
-      // ===== 设备卡片 =====
-      Text('我的设备')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#212121')
-        .margin({ top: 24, bottom: 12 })
-        .padding({ left: 20 })
-        .alignSelf(ItemAlign.Start)
-
-      Scroll() {
-        Column({ space: 12 }) {
-          ForEach(this.getDeviceRows(), (row: DeviceItemData[], rowIndex: number) => {
-            Row({ space: 12 }) {
-              ForEach(row, (device: DeviceItemData) => {
+        // 设备卡片列表 - 支持下拉刷新
+        Refresh({ refreshing: $$this.isRefreshing }) {
+          List({ space: 12 }) {
+            ForEach(this.devices, (device: DeviceItemData) => {
+              ListItem() {
                 DeviceCard({
                   device: device,
                   onToggle: () => {
-                    device.isOn = !device.isOn
-                  },
-                  onValueChange: (val: number) => {
-                    device.value = Math.round(val)
+                    this.toggleDevice(device)
                   }
                 })
-                  .layoutWeight(1)
-              })
-              if (row.length === 1) {
-                Column().layoutWeight(1)
               }
-            }
-            .width('100%')
-          })
+            }, (device: DeviceItemData) => device.id.toString())
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, bottom: 20 })
+          .lanes(1)
         }
-        .padding({ left: 20, right: 20, bottom: 20 })
+        .onRefreshing(() => {
+          // 模拟刷新
+          setTimeout(() => {
+            this.devices.forEach(d => {
+              d.isOnline = true
+            })
+            this.isRefreshing = false
+            promptAction.showToast({ message: '设备状态已刷新', duration: 2000 })
+          }, 1500)
+        })
+        .layoutWeight(1)
       }
-      .layoutWeight(1)
-      .scrollBar(BarState.Off)
+      .width('100%')
+      .height('100%')
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#FAFAFA')
+  }
+
+  toggleDevice(device: DeviceItemData) {
+    device.isOn = !device.isOn
+    // 更新参数文本
+    if (device.type === 'play') {
+      device.paramLabel = device.isOn ? '电量80%  清洁中' : '电量80%  已暂停'
+    }
+    // Toast 提示
+    promptAction.showToast({
+      message: `${device.name}状态已更新`,
+      duration: 3000
+    })
   }
 }
