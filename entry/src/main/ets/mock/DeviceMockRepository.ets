@@ -16,9 +16,21 @@ class DeviceSeed {
   category: string
   type: 'power' | 'play'
   defaultOn: boolean
+  defaultOnline: boolean
+  metricPrefix: string
+  metricUnit: string
+  activeMetricBase: number
+  activeMetricRange: number
+  idleMetricBase: number
+  idleMetricRange: number
+  metricStep: number
+  activeStateText: string
+  idleStateText: string
 
-  constructor(id: number, name: string, icon: string, room: string, category: string,
-    type: 'power' | 'play', defaultOn: boolean) {
+  constructor(id: number, name: string, icon: string, room: string, category: string, type: 'power' | 'play',
+    defaultOn: boolean, defaultOnline: boolean, metricPrefix: string, metricUnit: string,
+    activeMetricBase: number, activeMetricRange: number, idleMetricBase: number, idleMetricRange: number,
+    metricStep: number, activeStateText: string, idleStateText: string) {
     this.id = id
     this.name = name
     this.icon = icon
@@ -26,19 +38,37 @@ class DeviceSeed {
     this.category = category
     this.type = type
     this.defaultOn = defaultOn
+    this.defaultOnline = defaultOnline
+    this.metricPrefix = metricPrefix
+    this.metricUnit = metricUnit
+    this.activeMetricBase = activeMetricBase
+    this.activeMetricRange = activeMetricRange
+    this.idleMetricBase = idleMetricBase
+    this.idleMetricRange = idleMetricRange
+    this.metricStep = metricStep
+    this.activeStateText = activeStateText
+    this.idleStateText = idleStateText
   }
 }
 
 export class DeviceMockRepository {
   static readonly fallbackSeeds: DeviceSeed[] = [
-    new DeviceSeed(1, '客厅主灯', 'icon_light.png', '客厅', 'light', 'power', true),
-    new DeviceSeed(2, '卧室空调', 'icon_ac_unit.png', '卧室', 'ac', 'power', true),
-    new DeviceSeed(3, '客厅窗帘', 'icon_curtain.png', '客厅', 'curtain', 'power', false),
-    new DeviceSeed(4, '扫地机器人', 'icon_robot.png', '全屋', 'robot', 'play', true),
-    new DeviceSeed(5, '玄关门锁', 'icon_ac.png', '玄关', 'lock', 'power', true),
-    new DeviceSeed(6, '儿童房加湿器', 'icon_ac.png', '儿童房', 'humidifier', 'power', true),
-    new DeviceSeed(7, '餐厅音箱', 'icon_light.png', '餐厅', 'speaker', 'play', false),
-    new DeviceSeed(8, '阳台摄像头', 'icon_robot.png', '阳台', 'camera', 'power', true),
+    new DeviceSeed(1, '客厅主灯', 'icon_light.png', '客厅', 'light', 'power',
+      true, true, '亮度', '%', 68, 28, 0, 1, 7, '', '关闭'),
+    new DeviceSeed(2, '卧室空调', 'icon_ac_unit.png', '卧室', 'ac', 'power',
+      true, true, '温度', '°C', 24, 4, 28, 1, 1, '制冷', '待机'),
+    new DeviceSeed(3, '客厅窗帘', 'icon_curtain.png', '客厅', 'curtain', 'power',
+      false, true, '开合', '%', 30, 55, 0, 1, 11, '', '关闭'),
+    new DeviceSeed(4, '扫地机器人', 'icon_robot.png', '全屋', 'robot', 'play',
+      true, true, '电量', '%', 58, 32, 58, 24, 7, '清洁中', '已暂停'),
+    new DeviceSeed(5, '玄关门锁', 'icon_ac.png', '玄关', 'lock', 'power',
+      true, true, '电量', '%', 72, 20, 72, 20, 5, '已上锁', '未上锁'),
+    new DeviceSeed(6, '儿童房加湿器', 'icon_ac.png', '儿童房', 'humidifier', 'power',
+      true, true, '湿度', '%', 46, 18, 40, 6, 4, '自动', '待机'),
+    new DeviceSeed(7, '餐厅音箱', 'icon_light.png', '餐厅', 'speaker', 'play',
+      false, true, '音量', '%', 24, 40, 0, 1, 6, '播放中', '已暂停'),
+    new DeviceSeed(8, '阳台摄像头', 'icon_robot.png', '阳台', 'camera', 'power',
+      true, true, '', '', 0, 1, 0, 1, 1, '1080P  侦测中', '待机  画面关闭'),
   ]
 
   static cachedSeeds: DeviceSeed[] = DeviceMockRepository.fallbackSeeds
@@ -71,8 +101,14 @@ export class DeviceMockRepository {
   static updateDeviceAfterToggle(device: DeviceItemData): void {
     let seedId: number = DeviceMockRepository.getSeedId(device.id)
     let deviceRound: number = DeviceMockRepository.getSeedCycle(device.id)
-    device.paramLabel = DeviceMockRepository.buildParamLabel(device.category, seedId + deviceRound * 17, deviceRound,
+    let seed: DeviceSeed = DeviceMockRepository.findSeed(seedId)
+    device.paramLabel = DeviceMockRepository.buildParamLabel(seed, seedId + deviceRound * 17, deviceRound,
       device.isOnline, device.isOn)
+  }
+
+  static async getSeedSignature(context?: common.Context): Promise<string> {
+    let seeds = await DeviceMockRepository.loadSeeds(context)
+    return JSON.stringify(seeds)
   }
 
   static async loadSeeds(context?: common.Context): Promise<DeviceSeed[]> {
@@ -105,15 +141,46 @@ export class DeviceMockRepository {
       let type: 'power' | 'play' = String(item['type']) === 'play' ? 'play' : 'power'
       seeds.push(new DeviceSeed(
         id,
-        String(item['name']),
-        String(item['icon']),
-        String(item['room']),
-        String(item['category']),
+        DeviceMockRepository.readString(item, 'name', `设备${id}`),
+        DeviceMockRepository.readString(item, 'icon', 'icon_light.png'),
+        DeviceMockRepository.readString(item, 'room', '未命名房间'),
+        DeviceMockRepository.readString(item, 'category', 'light'),
         type,
-        Boolean(item['defaultOn'])
+        DeviceMockRepository.readBoolean(item, 'defaultOn', true),
+        DeviceMockRepository.readBoolean(item, 'defaultOnline', true),
+        DeviceMockRepository.readString(item, 'metricPrefix', ''),
+        DeviceMockRepository.readString(item, 'metricUnit', ''),
+        DeviceMockRepository.readNumber(item, 'activeMetricBase', 0),
+        DeviceMockRepository.readNumber(item, 'activeMetricRange', 1),
+        DeviceMockRepository.readNumber(item, 'idleMetricBase', 0),
+        DeviceMockRepository.readNumber(item, 'idleMetricRange', 1),
+        DeviceMockRepository.readNumber(item, 'metricStep', 1),
+        DeviceMockRepository.readString(item, 'activeStateText', ''),
+        DeviceMockRepository.readString(item, 'idleStateText', '')
       ))
     }
     return seeds.length > 0 ? seeds : DeviceMockRepository.fallbackSeeds
+  }
+
+  static readString(item: Record<string, string | number | boolean>, key: string, fallback: string): string {
+    let value = item[key]
+    if (value === undefined || value === null) {
+      return fallback
+    }
+    return String(value)
+  }
+
+  static readNumber(item: Record<string, string | number | boolean>, key: string, fallback: number): number {
+    let value = Number(item[key])
+    return Number.isFinite(value) ? value : fallback
+  }
+
+  static readBoolean(item: Record<string, string | number | boolean>, key: string, fallback: boolean): boolean {
+    let value = item[key]
+    if (value === undefined || value === null) {
+      return fallback
+    }
+    return Boolean(value)
   }
 
   static getVisibleCount(round: number, seedCount: number): number {
@@ -143,9 +210,9 @@ export class DeviceMockRepository {
     let seedId: number = seed.id + cycle * 17
     let deviceId: number = cycle * DEVICE_ID_SPAN + seed.id
     let effectRound: number = round + cycle
-    let isOnline: boolean = (seedId + effectRound) % 5 !== 0
+    let isOnline: boolean = DeviceMockRepository.getOnlineState(seed, seedId, effectRound)
     let isOn: boolean = isOnline ? DeviceMockRepository.getSwitchState(seed, effectRound) : false
-    let paramLabel: string = DeviceMockRepository.buildParamLabel(seed.category, seedId, effectRound, isOnline, isOn)
+    let paramLabel: string = DeviceMockRepository.buildParamLabel(seed, seedId, effectRound, isOnline, isOn)
     let name: string = cycle === 0 ? seed.name : `${seed.name}${cycle + 1}号`
     let room: string = cycle === 0 ? seed.room : `${seed.room}${cycle + 1}区`
     return new DeviceItemData(
@@ -170,50 +237,56 @@ export class DeviceMockRepository {
     return seedId > 0 ? seedId : deviceId
   }
 
+  static findSeed(seedId: number): DeviceSeed {
+    let matched = DeviceMockRepository.cachedSeeds.find((item: DeviceSeed) => item.id === seedId)
+    return matched ?? DeviceMockRepository.fallbackSeeds[0]
+  }
+
+  static getOnlineState(seed: DeviceSeed, seedId: number, round: number): boolean {
+    let cycle: number = (seedId + round) % 5
+    if (seed.defaultOnline) {
+      return cycle !== 0
+    }
+    return cycle <= 1
+  }
+
   static getSwitchState(seed: DeviceSeed, round: number): boolean {
     if (seed.category === 'light' || seed.category === 'ac' || seed.category === 'humidifier' || seed.category === 'camera') {
-      return (seed.id + round) % 3 !== 0
+      let active: boolean = (seed.id + round) % 3 !== 0
+      return seed.defaultOn ? active : !active
     }
     if (seed.category === 'curtain' || seed.category === 'speaker') {
-      return (seed.id + round) % 2 === 0
+      let active: boolean = (seed.id + round) % 2 === 0
+      return seed.defaultOn ? active : !active
     }
     return seed.defaultOn
   }
 
-  static buildParamLabel(category: string, id: number, round: number, isOnline: boolean, isOn: boolean): string {
-    let baseLabel: string = ''
-    if (category === 'light') {
-      let brightness: number = isOn ? 55 + (round * 9 + id * 7) % 40 : 0
-      baseLabel = `亮度${brightness}%`
-    } else if (category === 'ac') {
-      let temperature: number = isOn ? 24 + (round + id) % 4 : 28
-      let mode: string = isOn ? ((round + id) % 2 === 0 ? '制冷' : '除湿') : '待机'
-      baseLabel = `温度${temperature}°C  ${mode}`
-    } else if (category === 'curtain') {
-      let position: number = isOn ? 30 + (round * 11 + id * 5) % 65 : 0
-      baseLabel = `开合${position}%`
-    } else if (category === 'robot') {
-      let battery: number = 58 + (round * 7 + id * 6) % 38
-      let status: string = isOn ? '清洁中' : '已暂停'
-      baseLabel = `电量${battery}%  ${status}`
-    } else if (category === 'lock') {
-      let battery: number = 72 + (round * 5 + id * 3) % 24
-      let status: string = isOn ? '已上锁' : '未上锁'
-      baseLabel = `电量${battery}%  ${status}`
-    } else if (category === 'humidifier') {
-      let humidity: number = isOn ? 46 + (round * 4 + id * 3) % 22 : 40 + (round + id) % 6
-      let status: string = isOn ? '自动' : '待机'
-      baseLabel = `湿度${humidity}%  ${status}`
-    } else if (category === 'speaker') {
-      let volume: number = isOn ? 24 + (round * 6 + id * 5) % 48 : 0
-      let status: string = isOn ? '播放中' : '已暂停'
-      baseLabel = `音量${volume}%  ${status}`
-    } else {
-      let quality: string = isOn ? '1080P' : '待机'
-      let status: string = isOn ? '侦测中' : '画面关闭'
-      baseLabel = `${quality}  ${status}`
+  static buildParamLabel(seed: DeviceSeed, seedId: number, round: number, isOnline: boolean, isOn: boolean): string {
+    let parts: string[] = []
+    let metricText: string = DeviceMockRepository.buildMetricText(seed, seedId, round, isOn)
+    if (metricText.length > 0) {
+      parts.push(metricText)
     }
+    let stateText: string = isOn ? seed.activeStateText : seed.idleStateText
+    if (stateText.length > 0) {
+      parts.push(stateText)
+    }
+    let label: string = parts.length > 0 ? parts.join('  ') : seed.name
+    return isOnline ? label : `${label}  设备离线`
+  }
 
-    return isOnline ? baseLabel : `${baseLabel}  设备离线`
+  static buildMetricText(seed: DeviceSeed, seedId: number, round: number, isOn: boolean): string {
+    if (seed.metricPrefix.length === 0) {
+      return ''
+    }
+    let base: number = isOn ? seed.activeMetricBase : seed.idleMetricBase
+    let range: number = isOn ? seed.activeMetricRange : seed.idleMetricRange
+    let offset: number = 0
+    if (range > 1) {
+      let step = seed.metricStep > 0 ? seed.metricStep : 1
+      offset = (round * step + seedId * step) % range
+    }
+    return `${seed.metricPrefix}${base + offset}${seed.metricUnit}`
   }
 }

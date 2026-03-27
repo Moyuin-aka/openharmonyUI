@@ -10,6 +10,7 @@ const STORE_NAME: string = 'smart_home_store'
 const DEVICES_KEY: string = 'devices'
 const ROUND_KEY: string = 'refresh_round'
 const FORM_RECORDS_KEY: string = 'form_records'
+const MOCK_SIGNATURE_KEY: string = 'mock_signature'
 const LOAD_MORE_BATCH: number = 4
 
 class FormRecord {
@@ -145,15 +146,22 @@ export class DeviceStateRepository {
   static async ensureStore(context: common.Context): Promise<void> {
     let store = await DeviceStateRepository.getStore(context)
     let rawDevices = await store.get(DEVICES_KEY, '') as string
-    if (rawDevices.length === 0) {
-      let devices = await DeviceMockRepository.getInitialDevices(context)
-      await DeviceStateRepository.persistDevices(store, devices, 0)
-    }
-
     let rawForms = await store.get(FORM_RECORDS_KEY, '') as string
     if (rawForms.length === 0) {
       await store.put(FORM_RECORDS_KEY, '[]')
       await store.flush()
+      rawForms = '[]'
+    }
+
+    let currentRound = Number(await store.get(ROUND_KEY, 0))
+    let currentSignature = await DeviceMockRepository.getSeedSignature(context)
+    let storedSignature = await store.get(MOCK_SIGNATURE_KEY, '') as string
+    if (rawDevices.length === 0 || storedSignature !== currentSignature) {
+      let devices = await DeviceMockRepository.getDevicesForRound(context, currentRound)
+      await DeviceStateRepository.persistDevices(store, devices, currentRound)
+      await store.put(MOCK_SIGNATURE_KEY, currentSignature)
+      await store.flush()
+      await DeviceStateRepository.syncRecords(DeviceStateRepository.restoreForms(rawForms), devices)
     }
   }
 
@@ -200,6 +208,12 @@ export class DeviceStateRepository {
       records.push(new FormRecord(String(parsed[index].formId), String(parsed[index].formName)))
     }
     return records
+  }
+
+  static async syncRecords(records: FormRecord[], devices: DeviceItemData[]): Promise<void> {
+    for (let index = 0; index < records.length; index++) {
+      await DeviceStateRepository.syncFormRecord(records[index], devices)
+    }
   }
 
   static async syncFormRecord(record: FormRecord, devices: DeviceItemData[]): Promise<void> {
