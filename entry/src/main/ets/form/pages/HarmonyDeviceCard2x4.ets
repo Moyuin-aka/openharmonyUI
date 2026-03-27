@@ -107,14 +107,13 @@ struct HarmonyDeviceCard2x4 {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        Column({ space: 8 }) {
+        Column() {
           this.devicePanel(this.primaryId, this.primaryName, this.primaryParam, this.primaryOnlineText,
             this.primaryIcon, this.primaryButtonIcon, this.primaryButtonBg, this.primaryButtonOpacity)
-          this.devicePanel(this.secondaryId, this.secondaryName, this.secondaryParam, this.secondaryOnlineText,
-            this.secondaryIcon, this.secondaryButtonIcon, this.secondaryButtonBg, this.secondaryButtonOpacity)
         }
         .width('100%')
         .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
       }
       .width('100%')
       .height('100%')
